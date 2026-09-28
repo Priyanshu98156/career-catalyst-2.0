@@ -4,6 +4,7 @@ from backend.models.profile import Profile
 from backend.models.experience import Experience, MasterBullet
 from backend.models.job import JobDescription
 from backend.models.resume import TailoredResume
+from backend.models.refresh_token import RefreshToken
 
 # Re-export schemas for convenience and backward compatibility
 from backend.schemas import (
@@ -38,6 +39,7 @@ __all__ = [
     "MasterBullet",
     "JobDescription",
     "TailoredResume",
+    "RefreshToken",
     "UserBase",
     "UserCreate",
     "UserLogin",

@@ -34,11 +34,25 @@ class UserResponse(UserBase):
 
 
 class Token(BaseModel):
-    """JWT response returned upon successful authentication."""
+    """JWT response returned upon successful authentication (Access + Refresh)."""
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     tenant_id: str
     user_id: str
+    user: Optional[UserResponse] = None
+
+
+class RefreshTokenRequest(BaseModel):
+    """Payload to request a new access token using a refresh token."""
+    refresh_token: str
+
+
+class RefreshTokenResponse(BaseModel):
+    """Payload returned upon refreshing tokens."""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
@@ -46,3 +60,9 @@ class TokenData(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
     tenant_id: Optional[str] = None
+    token_type: Optional[str] = None
+
+
+class MessageResponse(BaseModel):
+    """Standard generic success message response."""
+    message: str

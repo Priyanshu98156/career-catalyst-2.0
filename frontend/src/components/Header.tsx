@@ -1,12 +1,23 @@
 import React from 'react';
+import type { User } from '../services/api';
 
 interface HeaderProps {
   activeTab: 'profile' | 'studio' | 'history';
   setActiveTab: (tab: 'profile' | 'studio' | 'history') => void;
   apiHealthy: boolean;
+  currentUser: User | null;
+  onOpenAuth: () => void;
+  onLogout: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, apiHealthy }) => {
+export const Header: React.FC<HeaderProps> = ({
+  activeTab,
+  setActiveTab,
+  apiHealthy,
+  currentUser,
+  onOpenAuth,
+  onLogout,
+}) => {
   return (
     <header style={{
       borderBottom: '1px solid var(--border-subtle)',
@@ -74,16 +85,14 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, apiHeal
         </button>
       </nav>
 
-      {/* Tenant Status Badges */}
+      {/* User Auth & Tenant Status */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span className="badge badge-indigo">
-          Tenant: default_tenant
-        </span>
+        {/* API Health Pill */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          fontSize: '0.78rem',
+          fontSize: '0.75rem',
           color: apiHealthy ? '#10b981' : '#f43f5e',
           background: apiHealthy ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)',
           padding: '4px 10px',
@@ -96,8 +105,72 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, apiHeal
             borderRadius: '50%',
             backgroundColor: apiHealthy ? '#10b981' : '#f43f5e',
           }} />
-          {apiHealthy ? 'API Active' : 'API Connecting'}
+          {apiHealthy ? 'API Active' : 'Connecting'}
         </div>
+
+        {/* Tenant Pill */}
+        <span className="badge badge-indigo" style={{ fontSize: '0.75rem' }}>
+          Workspace: {currentUser ? currentUser.tenant_id : 'Guest'}
+        </span>
+
+        {/* User Account Button */}
+        {currentUser ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: 'var(--bg-secondary)',
+              border: '1px solid var(--border-subtle)',
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'var(--grad-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                color: '#fff',
+              }}>
+                {(currentUser.full_name || currentUser.email).charAt(0).toUpperCase()}
+              </div>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {currentUser.full_name || currentUser.email.split('@')[0]}
+              </span>
+            </div>
+            <button
+              onClick={onLogout}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.78rem', padding: '6px 10px' }}
+              title="Sign Out"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+              Logout
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onOpenAuth}
+            className="btn btn-primary"
+            style={{ fontSize: '0.82rem', padding: '7px 14px', borderRadius: '8px' }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+            Sign In / Register
+          </button>
+        )}
       </div>
     </header>
   );

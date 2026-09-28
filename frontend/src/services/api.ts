@@ -1,16 +1,168 @@
 import axios from 'axios';
+import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  tenant_id: string;
+  role: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  tenant_id: string;
+  user_id: string;
+  user?: User;
+}
+
+// Token storage helpers
+export const tokenStorage = {
+  getAccessToken: (): string | null => localStorage.getItem('cc_access_token'),
+  getRefreshToken: (): string | null => localStorage.getItem('cc_refresh_token'),
+  getTenantId: (): string => localStorage.getItem('cc_tenant_id') || 'default_tenant',
+  getUserId: (): string => localStorage.getItem('cc_user_id') || 'default_user',
+  getUser: (): User | null => {
+    const raw = localStorage.getItem('cc_user');
+    try {
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+  setTokens: (auth: AuthResponse) => {
+    localStorage.setItem('cc_access_token', auth.access_token);
+    localStorage.setItem('cc_refresh_token', auth.refresh_token);
+    localStorage.setItem('cc_tenant_id', auth.tenant_id);
+    localStorage.setItem('cc_user_id', auth.user_id);
+    if (auth.user) {
+      localStorage.setItem('cc_user', JSON.stringify(auth.user));
+    }
+  },
+  clearTokens: () => {
+    localStorage.removeItem('cc_access_token');
+    localStorage.removeItem('cc_refresh_token');
+    localStorage.removeItem('cc_tenant_id');
+    localStorage.removeItem('cc_user_id');
+    localStorage.removeItem('cc_user');
+  },
+};
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
-    'X-Tenant-ID': 'default_tenant',
-    'X-User-ID': 'default_user',
   },
 });
 
+// ---------------------------------------------------------------------------
+// 1. Request Interceptor: Attach Access Token and Tenant Headers
+// ---------------------------------------------------------------------------
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const accessToken = tokenStorage.getAccessToken();
+    const tenantId = tokenStorage.getTenantId();
+    const userId = tokenStorage.getUserId();
+
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    config.headers['X-Tenant-ID'] = tenantId;
+    config.headers['X-User-ID'] = userId;
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// ---------------------------------------------------------------------------
+// 2. Response Interceptor: Double Token Silent Refresh on 401 Unauthorized
+// ---------------------------------------------------------------------------
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else if (token) {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Check if error is 401 and request wasn't already retried
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/api/auth/login') &&
+      !originalRequest.url?.includes('/api/auth/register') &&
+      !originalRequest.url?.includes('/api/auth/refresh')
+    ) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiClient(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = tokenStorage.getRefreshToken();
+      if (!refreshToken) {
+        tokenStorage.clearTokens();
+        isRefreshing = false;
+        return Promise.reject(error);
+      }
+
+      try {
+        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+          refresh_token: refreshToken,
+        });
+
+        const { access_token, refresh_token } = response.data;
+        localStorage.setItem('cc_access_token', access_token);
+        localStorage.setItem('cc_refresh_token', refresh_token);
+
+        originalRequest.headers.Authorization = `Bearer ${access_token}`;
+        processQueue(null, access_token);
+        return apiClient(originalRequest);
+      } catch (refreshErr) {
+        processQueue(refreshErr, null);
+        tokenStorage.clearTokens();
+        window.dispatchEvent(new Event('cc_auth_logout'));
+        return Promise.reject(refreshErr);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Resume & Profile Domain Interfaces
+// ---------------------------------------------------------------------------
 export interface EducationItem {
   institution: string;
   degree: string;
@@ -116,7 +268,56 @@ export interface ResumeHistoryItem {
   created_at: string;
 }
 
-// API methods
+// ---------------------------------------------------------------------------
+// Auth API Endpoints
+// ---------------------------------------------------------------------------
+export async function registerUser(payload: {
+  email: string;
+  password: string;
+  full_name?: string;
+  tenant_id?: string;
+}): Promise<AuthResponse> {
+  const response = await apiClient.post<AuthResponse>('/api/auth/register', payload);
+  tokenStorage.setTokens(response.data);
+  return response.data;
+}
+
+export async function loginUser(payload: {
+  email: string;
+  password: string;
+  tenant_id?: string;
+}): Promise<AuthResponse> {
+  const response = await apiClient.post<AuthResponse>('/api/auth/login', payload);
+  tokenStorage.setTokens(response.data);
+  return response.data;
+}
+
+export async function logoutUser(): Promise<void> {
+  const refreshToken = tokenStorage.getRefreshToken();
+  try {
+    if (refreshToken) {
+      await apiClient.post('/api/auth/logout', { refresh_token: refreshToken });
+    }
+  } catch (err) {
+    // Graceful ignore
+  } finally {
+    tokenStorage.clearTokens();
+    window.dispatchEvent(new Event('cc_auth_logout'));
+  }
+}
+
+export async function fetchCurrentUser(): Promise<User | null> {
+  try {
+    const response = await apiClient.get<User>('/api/auth/me');
+    return response.data;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Profile & Resume API Methods
+// ---------------------------------------------------------------------------
 export async function uploadResumePdf(file: File, saveToDb: boolean = true): Promise<ParsedProfile> {
   const formData = new FormData();
   formData.append('file', file);

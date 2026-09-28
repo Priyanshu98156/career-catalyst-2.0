@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
 from backend.routes.profile_router import router as profile_router
 from backend.routes.resume_router import router as resume_router
+from backend.routes.auth_router import router as auth_router
 
 
 @asynccontextmanager
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 # Mount domain routers
+app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(resume_router)
 

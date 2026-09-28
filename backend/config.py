@@ -27,3 +27,11 @@ VECTOR_COLLECTION_NAME: str = os.getenv("VECTOR_COLLECTION_NAME", "user_experien
 # ---------------------------------------------------------------------------
 APP_ENV: str = os.getenv("APP_ENV", "development")
 APP_VERSION: str = "2.0.0"
+
+# ---------------------------------------------------------------------------
+# JWT & Authentication Settings (Double Token Strategy)
+# ---------------------------------------------------------------------------
+JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "careercatalyst_super_secret_jwt_key_change_in_production")
+JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
