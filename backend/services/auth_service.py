@@ -68,12 +68,12 @@ def create_access_token(user_id: str, tenant_id: str, email: str) -> str:
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
-        "sub": user_id,
-        "tenant_id": tenant_id,
-        "email": email,
-        "type": "access",
-        "iat": int(now.timestamp()),
-        "exp": int(expire.timestamp()),
+        "sub": user_id,                 # Standard claim: Subject (User ID)
+        "tenant_id": tenant_id,         # Multi-tenant organization / workspace boundary
+        "email": email,                 # User account email
+        "type": "access",               # Token type discriminator
+        "iat": int(now.timestamp()),   # Standard claim: Issued At (creation timestamp)
+        "exp": int(expire.timestamp()), # Standard claim: Expiration timestamp
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
@@ -82,14 +82,17 @@ def create_refresh_token(user_id: str, tenant_id: str, db: Session) -> str:
     """Generate a long-lived Refresh Token (default 7 days) and save its hash in DB."""
     now = datetime.now(timezone.utc)
     expire = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    jti = secrets.token_hex(16)
+    
+    # Generate a unique token serial ID to prevent replay attacks
+    # (RFC 7519 standard abbreviates this unique token identifier as 'jti' - JWT ID)
+    token_unique_id = secrets.token_hex(16)
     payload = {
-        "sub": user_id,
-        "tenant_id": tenant_id,
-        "type": "refresh",
-        "jti": jti,
-        "iat": int(now.timestamp()),
-        "exp": int(expire.timestamp()),
+        "sub": user_id,                 # User ID
+        "tenant_id": tenant_id,         # Multi-tenant organization / workspace boundary
+        "type": "refresh",              # Token type
+        "jti": token_unique_id,         # Unique Token Serial ID (for revocation tracking)
+        "iat": int(now.timestamp()),   # Creation timestamp
+        "exp": int(expire.timestamp()), # Expiration timestamp
     }
     raw_token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 

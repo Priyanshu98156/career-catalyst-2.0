@@ -13,7 +13,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [tenantId, setTenantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -30,7 +29,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           email: email.trim(),
           password,
           full_name: fullName.trim() || undefined,
-          tenant_id: tenantId.trim() || undefined,
         });
         if (res.user) {
           onAuthSuccess(res.user);
@@ -47,7 +45,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
         const res = await loginUser({
           email: email.trim(),
           password,
-          tenant_id: tenantId.trim() || undefined,
         });
         if (res.user) {
           onAuthSuccess(res.user);
@@ -135,7 +132,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
           </h2>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             {isRegister
-              ? 'Multi-tenant isolation & double-token session security'
+              ? 'Personalized AI resume tailoring & secure session'
               : 'Sign in to access your profile vault & tailored resumes'}
           </p>
         </div>
@@ -234,22 +231,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-            />
-          </div>
-
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Workspace / Tenant ID (Optional)
-              </label>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Auto-assigned if blank</span>
-            </div>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="e.g. acme_corp or default_tenant"
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
             />
           </div>
 

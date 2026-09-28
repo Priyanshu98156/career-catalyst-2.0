@@ -108,11 +108,6 @@ export const Header: React.FC<HeaderProps> = ({
           {apiHealthy ? 'API Active' : 'Connecting'}
         </div>
 
-        {/* Tenant Pill */}
-        <span className="badge badge-indigo" style={{ fontSize: '0.75rem' }}>
-          Workspace: {currentUser ? currentUser.tenant_id : 'Guest'}
-        </span>
-
         {/* User Account Button */}
         {currentUser ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
