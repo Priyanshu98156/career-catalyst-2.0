@@ -16,7 +16,7 @@ export function App() {
 
   const checkHealth = useCallback(async () => {
     try {
-      const res = await apiClient.get('/health');
+      const res = await apiClient.get('/api/health');
       if (res.data?.status === 'active') {
         setApiHealthy(true);
       }

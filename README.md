@@ -14,8 +14,8 @@
 ---
 
 ## 🌟 Live Demo
-- **Live Cloud Deployment (OCI Always Free):** [http://137.23.47.241](http://137.23.47.241)
-- **Interactive Swagger API Docs:** [http://137.23.47.241/docs](http://137.23.47.241/docs)
+- **Live Cloud Deployment (HTTPS + Free SSL):** [https://career-catalyst.duckdns.org](https://career-catalyst.duckdns.org)
+- **Interactive Swagger API Docs:** [https://career-catalyst.duckdns.org/docs](https://career-catalyst.duckdns.org/docs)
 
 ---
 
