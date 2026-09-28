@@ -1,0 +1,43 @@
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from backend.database import init_db
+from backend.routes.profile_router import router as profile_router
+from backend.routes.resume_router import router as resume_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize DB schemas on startup if database is accessible
+    try:
+        init_db()
+        print("Database initialized successfully.")
+    except Exception as e:
+        print(f"Database connection deferred/not ready: {e}")
+    yield
+
+
+app = FastAPI(
+    title="CareerCatalyst API",
+    description="Multi-tenant AI-driven SaaS for ATS-optimized resume tailoring",
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+# CORS configuration for frontend dev & production
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount domain routers
+app.include_router(profile_router)
+app.include_router(resume_router)
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "active", "message": "CareerCatalyst Backend is running"}
