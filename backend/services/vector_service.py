@@ -2,9 +2,8 @@ from typing import Any, Dict, List, Optional
 from langchain_core.documents import Document
 from langchain_postgres import PGVector
 from backend.ai_client import get_embeddings_model
-from backend.database import DATABASE_URL, engine
-
-COLLECTION_NAME = "user_experiences"
+from backend.config import VECTOR_COLLECTION_NAME
+from backend.database import engine
 
 _vector_store_instance: Optional[PGVector] = None
 
@@ -19,7 +18,7 @@ def get_vector_store() -> PGVector:
         embeddings = get_embeddings_model()
         _vector_store_instance = PGVector(
             embeddings=embeddings,
-            collection_name=COLLECTION_NAME,
+            collection_name=VECTOR_COLLECTION_NAME,
             connection=engine,
             use_jsonb=True,
             create_extension=False,  # Already handled in database.init_db

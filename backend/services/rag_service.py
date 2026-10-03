@@ -1,9 +1,8 @@
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 from langchain_core.prompts import ChatPromptTemplate
-from sqlalchemy.orm import Session
 
 from backend.ai_client import get_chat_model
-from backend.models import MasterBullet
+from backend.models import MasterBullet, tenant_filter
 from backend.schemas.job import JDAnalysis
 from backend.services.vector_service import search_user_bullets
 
@@ -58,7 +57,8 @@ def retrieve_candidate_bullets(
     user_id: str,
     jd_analysis: JDAnalysis,
     top_k: int = 8,
-    db: Optional[Session] = None,
+    fallback_loader: Optional[Callable[[], List[str]]] = None,
+    db: Optional[Any] = None,
 ) -> List[str]:
     """
     Retrieve candidate master bullets matching the target JD.
@@ -67,7 +67,7 @@ def retrieve_candidate_bullets(
     1. Construct a targeted semantic query from job title, primary skills, and keywords.
     2. Query pgvector store with strict tenant_id & user_id isolation.
     3. Resilience Fallback: If vector store returns no results or encounters an issue,
-       query the relational MasterBullet records from SQLite/Postgres.
+       invoke injected fallback_loader (decoupled) or relational DB query (backward compatibility).
     """
     # 1. Build composite search query
     query_terms = [jd_analysis.job_title] + jd_analysis.primary_skills[:6] + jd_analysis.keywords_to_target[:4]
@@ -87,15 +87,20 @@ def retrieve_candidate_bullets(
     except Exception as e:
         print(f"Notice: Vector similarity search fallback to relational DB: {e}")
 
-    # 3. Resilient Fallback: If vector store produced no bullets and db session is provided,
-    # pull relational master bullets directly
-    if not retrieved_bullets and db is not None:
-        db_bullets = (
-            db.query(MasterBullet.bullet_text)
-            .filter(MasterBullet.tenant_id == tenant_id, MasterBullet.user_id == user_id)
-            .limit(top_k)
-            .all()
-        )
-        retrieved_bullets = [b[0] for b in db_bullets if b[0]]
+    # 3. Resilient Fallback
+    if not retrieved_bullets:
+        if fallback_loader is not None:
+            try:
+                retrieved_bullets = fallback_loader()[:top_k]
+            except Exception as e:
+                print(f"Notice: Injected fallback bullet loader failed: {e}")
+        elif db is not None:
+            db_bullets = (
+                db.query(MasterBullet.bullet_text)
+                .filter(*tenant_filter(MasterBullet, tenant_id, user_id))
+                .limit(top_k)
+                .all()
+            )
+            retrieved_bullets = [b[0] for b in db_bullets if b[0]]
 
     return retrieved_bullets

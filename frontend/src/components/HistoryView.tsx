@@ -2,14 +2,20 @@ import React, { useState, useEffect } from 'react';
 import type { ResumeHistoryItem } from '../services/api';
 import { fetchResumeHistory } from '../services/api';
 
-export const HistoryView: React.FC = () => {
+interface HistoryViewProps {
+  isActive?: boolean;
+}
+
+export const HistoryView: React.FC<HistoryViewProps> = ({ isActive }) => {
   const [history, setHistory] = useState<ResumeHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadHistory();
-  }, []);
+    if (isActive !== false) {
+      loadHistory();
+    }
+  }, [isActive]);
 
   const loadHistory = async () => {
     setIsLoading(true);

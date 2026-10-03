@@ -1,31 +1,23 @@
-from typing import List, Optional
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
-from backend.models import JobDescription, TailoredResume
+from backend.dependencies import get_db, get_tenant_and_user
 from backend.schemas.job import JDAnalysis, JDAnalysisRequest
 from backend.schemas.resume import (
     TailorRequest,
     TailoredResumeModelResponse,
     TailoredResumeResponse,
 )
-from backend.services.profile_service import get_user_profile
-from backend.services.rag_service import (
-    analyze_job_description,
-    retrieve_candidate_bullets,
+from backend.services.rag_service import analyze_job_description
+from backend.services.resume_service import (
+    get_resume_by_id as fetch_resume_by_id,
+    get_resume_history as fetch_resume_history,
+    save_job_description_record,
+    tailor_and_persist_resume,
 )
-from backend.services.synthesis_service import synthesize_tailored_resume
 
 router = APIRouter(prefix="/api/resume", tags=["Resume Tailoring & RAG"])
-
-
-def get_tenant_and_user(
-    x_tenant_id: Optional[str] = Header("default_tenant", alias="X-Tenant-ID"),
-    x_user_id: Optional[str] = Header("default_user", alias="X-User-ID"),
-) -> tuple[str, str]:
-    """Extract tenant_id and user_id from headers for multi-tenant isolation."""
-    return x_tenant_id or "default_tenant", x_user_id or "default_user"
 
 
 @router.post(
@@ -52,18 +44,13 @@ def analyze_jd_endpoint(
     )
 
     if save_jd:
-        jd_record = JobDescription(
+        save_job_description_record(
+            db=db,
             tenant_id=tenant_id,
             user_id=user_id,
-            title=analysis.job_title,
-            company=analysis.company,
             raw_text=request.job_description,
-            primary_skills=analysis.primary_skills,
-            responsibilities=analysis.core_responsibilities,
-            keywords=analysis.keywords_to_target,
+            analysis=analysis,
         )
-        db.add(jd_record)
-        db.commit()
 
     return analysis
 
@@ -80,7 +67,7 @@ def tailor_resume_endpoint(
     auth_context: tuple[str, str] = Depends(get_tenant_and_user),
 ):
     """
-    Full end-to-end RAG Resume Tailoring Pipeline:
+    Full end-to-end RAG Resume Tailoring Pipeline delegated to resume_service:
     1. Analyzes the target Job Description.
     2. Retrieves top-K matching candidate achievements via pgvector with multi-tenant isolation.
     3. Fetches candidate base profile.
@@ -89,52 +76,13 @@ def tailor_resume_endpoint(
     6. Persists the tailored resume record in the database.
     """
     tenant_id, user_id = auth_context
-
-    # 1. Analyze Job Description
-    jd_analysis = analyze_job_description(
-        job_description=request.job_description,
-        job_title=request.target_job_title,
+    return tailor_and_persist_resume(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        request=request,
+        save_to_db=save_to_db,
     )
-
-    # 2. Candidate Bullets (Manual override or RAG semantic retrieval)
-    if request.master_bullets and len(request.master_bullets) > 0:
-        candidate_bullets = request.master_bullets
-    else:
-        candidate_bullets = retrieve_candidate_bullets(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            jd_analysis=jd_analysis,
-            top_k=request.top_k_bullets,
-            db=db,
-        )
-
-    # 3. Base Profile Context
-    user_profile = get_user_profile(db=db, tenant_id=tenant_id, user_id=user_id)
-
-    # 4. Synthesize Tailored Resume via LangChain
-    tailored_response = synthesize_tailored_resume(
-        job_description=request.job_description,
-        jd_analysis=jd_analysis,
-        retrieved_bullets=candidate_bullets,
-        user_profile=user_profile,
-    )
-
-    # 5. Persist to Relational DB if requested
-    if save_to_db:
-        resume_record = TailoredResume(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            title=f"{jd_analysis.job_title} Tailored Resume",
-            structured_content=tailored_response.structured_resume.model_dump(),
-            raw_latex=tailored_response.latex_source,
-            match_score=tailored_response.match_score,
-        )
-        db.add(resume_record)
-        db.commit()
-        db.refresh(resume_record)
-        tailored_response.id = resume_record.id
-
-    return tailored_response
 
 
 @router.get(
@@ -148,12 +96,7 @@ def get_resume_history(
 ):
     """List all previously generated tailored resumes for the tenant and user."""
     tenant_id, user_id = auth_context
-    return (
-        db.query(TailoredResume)
-        .filter(TailoredResume.tenant_id == tenant_id, TailoredResume.user_id == user_id)
-        .order_by(TailoredResume.created_at.desc())
-        .all()
-    )
+    return fetch_resume_history(db=db, tenant_id=tenant_id, user_id=user_id)
 
 
 @router.get(
@@ -168,14 +111,11 @@ def get_resume_by_id(
 ):
     """Fetch a specific tailored resume by ID with tenant verification."""
     tenant_id, user_id = auth_context
-    resume = (
-        db.query(TailoredResume)
-        .filter(
-            TailoredResume.id == resume_id,
-            TailoredResume.tenant_id == tenant_id,
-            TailoredResume.user_id == user_id,
-        )
-        .first()
+    resume = fetch_resume_by_id(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        resume_id=resume_id,
     )
     if not resume:
         raise HTTPException(

@@ -48,6 +48,10 @@ export const tokenStorage = {
       localStorage.setItem('cc_user', JSON.stringify(auth.user));
     }
   },
+  updateTokens: (accessToken: string, refreshToken: string) => {
+    localStorage.setItem('cc_access_token', accessToken);
+    localStorage.setItem('cc_refresh_token', refreshToken);
+  },
   clearTokens: () => {
     localStorage.removeItem('cc_access_token');
     localStorage.removeItem('cc_refresh_token');
@@ -145,8 +149,7 @@ apiClient.interceptors.response.use(
         });
 
         const { access_token, refresh_token } = response.data;
-        localStorage.setItem('cc_access_token', access_token);
-        localStorage.setItem('cc_refresh_token', refresh_token);
+        tokenStorage.updateTokens(access_token, refresh_token);
 
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         processQueue(null, access_token);

@@ -1,14 +1,6 @@
-import os
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
-
-load_dotenv()
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://admin:password123@localhost:5432/resumes_db"
-)
+from backend.config import DATABASE_URL
 
 # Create engine with connection pooling
 engine = create_engine(

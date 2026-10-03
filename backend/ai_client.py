@@ -1,10 +1,7 @@
 import os
 from functools import lru_cache
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from backend.config import GEMINI_CHAT_MODEL, GEMINI_EMBEDDING_MODEL
-
-load_dotenv()
 
 # Standardize Gemini API key across SDKs and LangChain
 _api_key = (

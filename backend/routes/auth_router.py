@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
+from backend.dependencies import get_current_user_optional, get_db
 from backend.models import User
 from backend.schemas.auth import (
     MessageResponse,
@@ -16,7 +16,6 @@ from backend.services.auth_service import (
     authenticate_user,
     create_access_token,
     create_refresh_token,
-    get_current_user_optional,
     register_user,
     revoke_user_refresh_token,
     rotate_refresh_token,

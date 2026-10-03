@@ -1,20 +1,16 @@
-from sqlalchemy import Boolean, Column, DateTime, Index, String
+from sqlalchemy import Boolean, Column, Index, String
 from sqlalchemy.orm import relationship
-from backend.models.base import Base, generate_uuid, get_utc_now
+from backend.models.base import Base, TenantMixin
 
 
-class User(Base):
+class User(Base, TenantMixin):
     __tablename__ = "users"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    tenant_id = Column(String(64), nullable=False, index=True)
     email = Column(String(255), nullable=False, index=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     role = Column(String(50), default="member", nullable=False)
-    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now, nullable=False)
 
     # Relationships
     profiles = relationship("Profile", back_populates="user", cascade="all, delete-orphan")

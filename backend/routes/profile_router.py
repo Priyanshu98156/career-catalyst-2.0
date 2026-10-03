@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
-from backend.database import get_db
+from backend.dependencies import get_db, get_tenant_and_user
 from backend.schemas.experience import MasterBulletCreate, MasterBulletResponse
 from backend.schemas.profile import ParsedProfile, ProfileCreate, ProfileResponse
 from backend.services.parser_service import parse_resume_document
@@ -14,14 +14,6 @@ from backend.services.profile_service import (
 )
 
 router = APIRouter(prefix="/api/profile", tags=["Profile & Ingestion"])
-
-
-def get_tenant_and_user(
-    x_tenant_id: Optional[str] = Header("default_tenant", alias="X-Tenant-ID"),
-    x_user_id: Optional[str] = Header("default_user", alias="X-User-ID"),
-) -> tuple[str, str]:
-    """Extract tenant_id and user_id from headers for multi-tenant isolation."""
-    return x_tenant_id or "default_tenant", x_user_id or "default_user"
 
 
 @router.post(

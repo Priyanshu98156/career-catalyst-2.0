@@ -1,100 +1,23 @@
-import hashlib
-import hmac
-import os
 import secrets
-from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
-import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.config import (
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    JWT_ALGORITHM,
-    JWT_SECRET_KEY,
-    REFRESH_TOKEN_EXPIRE_DAYS,
-)
-from backend.database import get_db
-from backend.models import RefreshToken, User
+from backend.models import RefreshToken, User, tenant_filter
 from backend.schemas.auth import TokenData, UserCreate
-
-# Security bearer scheme for FastAPI Swagger docs and route protection
-security = HTTPBearer(auto_error=False)
-
-
-# ---------------------------------------------------------------------------
-# Password Hashing & Verification (PBKDF2-HMAC-SHA256)
-# ---------------------------------------------------------------------------
-
-def hash_password(password: str) -> str:
-    """Hash a password using salted PBKDF2-HMAC-SHA256."""
-    salt = secrets.token_hex(16)
-    key = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt.encode("utf-8"),
-        iterations=100_000,
-    )
-    return f"{salt}${key.hex()}"
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against the stored salt$hash."""
-    try:
-        salt, key = hashed_password.split("$", 1)
-        expected_key = hashlib.pbkdf2_hmac(
-            "sha256",
-            plain_password.encode("utf-8"),
-            salt.encode("utf-8"),
-            iterations=100_000,
-        )
-        return hmac.compare_digest(expected_key.hex(), key)
-    except Exception:
-        return False
-
-
-def hash_token(token: str) -> str:
-    """Compute a SHA-256 hash of a token for secure database storage."""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# JWT Token Generation & Verification (Double Token Strategy)
-# ---------------------------------------------------------------------------
-
-def create_access_token(user_id: str, tenant_id: str, email: str) -> str:
-    """Generate a short-lived Access Token (default 15 minutes)."""
-    now = datetime.now(timezone.utc)
-    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {
-        "sub": user_id,                 # Standard claim: Subject (User ID)
-        "tenant_id": tenant_id,         # Multi-tenant organization / workspace boundary
-        "email": email,                 # User account email
-        "type": "access",               # Token type discriminator
-        "iat": int(now.timestamp()),   # Standard claim: Issued At (creation timestamp)
-        "exp": int(expire.timestamp()), # Standard claim: Expiration timestamp
-    }
-    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+from backend.security import (
+    create_access_token,
+    decode_token,
+    generate_refresh_token_data,
+    hash_password,
+    hash_token,
+    verify_password,
+)
 
 
 def create_refresh_token(user_id: str, tenant_id: str, db: Session) -> str:
     """Generate a long-lived Refresh Token (default 7 days) and save its hash in DB."""
-    now = datetime.now(timezone.utc)
-    expire = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    
-    # Generate a unique token serial ID to prevent replay attacks
-    # (RFC 7519 standard abbreviates this unique token identifier as 'jti' - JWT ID)
-    token_unique_id = secrets.token_hex(16)
-    payload = {
-        "sub": user_id,                 # User ID
-        "tenant_id": tenant_id,         # Multi-tenant organization / workspace boundary
-        "type": "refresh",              # Token type
-        "jti": token_unique_id,         # Unique Token Serial ID (for revocation tracking)
-        "iat": int(now.timestamp()),   # Creation timestamp
-        "exp": int(expire.timestamp()), # Expiration timestamp
-    }
-    raw_token = jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    raw_token, expire = generate_refresh_token_data(user_id=user_id, tenant_id=tenant_id)
 
     # Persist token hash to DB for session tracking & revocation
     db_token = RefreshToken(
@@ -108,24 +31,6 @@ def create_refresh_token(user_id: str, tenant_id: str, db: Session) -> str:
     db.commit()
 
     return raw_token
-
-
-def decode_token(token: str) -> dict:
-    """Decode and validate a JWT token's signature and expiration."""
-    try:
-        return jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 
 def rotate_refresh_token(refresh_token_str: str, db: Session) -> Tuple[str, str, User]:
@@ -190,7 +95,7 @@ def revoke_user_refresh_token(refresh_token_str: str, db: Session) -> bool:
 def register_user(user_in: UserCreate, db: Session) -> User:
     """Register a new user with a hashed password and dedicated tenant_id."""
     existing_user = db.query(User).filter(
-        User.tenant_id == user_in.tenant_id,
+        *tenant_filter(User, user_in.tenant_id),
         User.email == user_in.email,
     ).first()
     if existing_user:
@@ -215,7 +120,7 @@ def register_user(user_in: UserCreate, db: Session) -> User:
 
 def authenticate_user(email: str, password: str, tenant_id: str, db: Session) -> Optional[User]:
     """Verify email and password within the specified tenant workspace."""
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(*tenant_filter(User, tenant_id), User.email == email).first()
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
@@ -223,24 +128,3 @@ def authenticate_user(email: str, password: str, tenant_id: str, db: Session) ->
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated")
     return user
-
-
-# ---------------------------------------------------------------------------
-# FastAPI Auth Dependency (Supports Bearer JWT with graceful fallback)
-# ---------------------------------------------------------------------------
-
-def get_current_user_optional(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db),
-) -> Optional[User]:
-    """Extract current authenticated user if Bearer token is provided."""
-    if not auth or not auth.credentials:
-        return None
-    try:
-        payload = decode_token(auth.credentials)
-        if payload.get("type") != "access":
-            return None
-        user_id = payload.get("sub")
-        return db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
-    except Exception:
-        return None

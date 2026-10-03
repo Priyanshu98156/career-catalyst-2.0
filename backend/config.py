@@ -19,6 +19,9 @@ DATABASE_URL: str = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://admin:password123@localhost:5432/resumes_db",
 )
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+
 
 VECTOR_COLLECTION_NAME: str = os.getenv("VECTOR_COLLECTION_NAME", "user_experiences")
 

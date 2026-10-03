@@ -1,14 +1,11 @@
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
-from backend.models.base import Base, generate_uuid, get_utc_now
+from backend.models.base import Base, UserTenantMixin
 
 
-class TailoredResume(Base):
+class TailoredResume(Base, UserTenantMixin):
     __tablename__ = "tailored_resumes"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    tenant_id = Column(String(64), nullable=False, index=True)
-    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     jd_id = Column(String(36), ForeignKey("job_descriptions.id", ondelete="SET NULL"), nullable=True, index=True)
     
     title = Column(String(255), nullable=False)
@@ -16,9 +13,6 @@ class TailoredResume(Base):
     raw_latex = Column(Text, nullable=True)
     match_score = Column(Float, nullable=True)
     version = Column(Integer, default=1, nullable=False)
-    
-    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
-    updated_at = Column(DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="tailored_resumes")
