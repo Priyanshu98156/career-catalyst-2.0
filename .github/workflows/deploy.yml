@@ -41,6 +41,7 @@ jobs:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
+          script_stop: true
           script: |
             cd /home/ubuntu/CareerCatalyst_v2
             
